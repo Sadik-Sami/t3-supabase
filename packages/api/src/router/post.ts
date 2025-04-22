@@ -28,7 +28,7 @@ export const postRouter = {
       });
     }),
 
-  create: protectedProcedure
+  create: publicProcedure
     .input(CreatePostSchema)
     .mutation(({ ctx, input }) => {
       return ctx.db.insert(Post).values(input);
