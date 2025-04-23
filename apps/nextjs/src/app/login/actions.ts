@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { createClient } from "~/utils/supabase/server";
+// import { createClient } from "~/utils/supabase/server";
+import { createClient } from "../../../../../packages/supabase/src/client/server"; //change this later due to monorepo issue
 
 export async function login(formData: FormData) {
   const supabase = await createClient();
