@@ -18,11 +18,15 @@ const createContext = cache(async () => {
   const heads = new Headers(await headers());
   heads.set("x-trpc-source", "rsc");
 
-  const supabase = await createClient();
+  const { supabase, session, token } = await createClient();
+  if (token) {
+    heads.set("Authorization", `Bearer ${token}`);
+  }
 
   return createTRPCContext({
-    supabase,
     headers: heads,
+    supabase,
+    authToken: token,
   });
 });
 

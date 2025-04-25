@@ -10,7 +10,7 @@ import {
 } from "@trpc/client";
 import { createTRPCContext } from "@trpc/tanstack-react-query";
 import SuperJSON from "superjson";
-
+import {createBrowserClient} from "@supabase/ssr";
 import type { AppRouter } from "@acme/api";
 
 import { env } from "~/env";
@@ -43,9 +43,23 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
         httpBatchStreamLink({
           transformer: SuperJSON,
           url: getBaseUrl() + "/api/trpc",
-          headers() {
+          headers: async () => {
             const headers = new Headers();
             headers.set("x-trpc-source", "nextjs-react");
+
+            const supabase = createBrowserClient(
+              env.NEXT_PUBLIC_SUPABASE_URL,
+              env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+            );
+
+            const {
+              data: { session },
+            } = await supabase.auth.getSession();
+
+            if (session?.access_token) {
+              headers.set("Authorization", `Bearer ${session.access_token}`);
+            }
+
             return headers;
           },
         }),

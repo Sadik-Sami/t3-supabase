@@ -1,59 +1,37 @@
-/**
- * YOU PROBABLY DON'T NEED TO EDIT THIS FILE, UNLESS:
- * 1. You want to modify request context (see Part 1)
- * 2. You want to create a new middleware or type of procedure (see Part 3)
- *
- * tl;dr - this is where all the tRPC server stuff is created and plugged in.
- * The pieces you will need to use are documented accordingly near the end
- */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
 
-import { auth, validateToken } from "@acme/auth";
 import { db } from "@acme/db/client";
 
-/**
- * Isomorphic Session getter for API requests
- * - Expo requests will have a session token in the Authorization header
- * - Next.js requests will have a session token in cookies
- */
-const isomorphicGetSession = async (headers: Headers) => {
-  const authToken = headers.get("Authorization") ?? null;
-  if (authToken) return validateToken(authToken);
-  return auth();
-};
-
-/**
- * 1. CONTEXT
- *
- * This section defines the "contexts" that are available in the backend API.
- *
- * These allow you to access things when processing a request, like the database, the session, etc.
- *
- * This helper generates the "internals" for a tRPC context. The API handler and RSC clients each
- * wrap this and provides the required context.
- *
- * @see https://trpc.io/docs/server/context
- */
 export const createTRPCContext = async (opts: {
   headers: Headers;
   supabase: SupabaseClient;
+  authToken: string | null;
 }) => {
-  const authToken = opts.headers.get("Authorization") ?? null;
-  const supabase = opts.supabase;
-  const user = await supabase.auth.getUser();
-  // const user = authToken
-  //   ? await supabase.auth.getUser(authToken)
-  //   : await supabase.auth.getUser();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      cookies: {
+        get: (key) => opts.headers.get(`x-cookie-${key}`) ?? undefined,
+      },
+    },
+  );
+  const authToken =
+    opts.headers.get("Authorization")?.replace("Bearer ", "") ?? null;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser(authToken);
   const source = opts.headers.get("x-trpc-source") ?? "unknown";
-  console.log(">>> tRPC Request from", source, "by", user.data.user);
+  console.log(">>> tRPC Request from", source, "by", user);
 
   return {
-    user: user.data.user,
+    supabase,
+    user,
     db,
-    token: authToken,
   };
 };
 
@@ -133,16 +111,11 @@ export const publicProcedure = t.procedure.use(timingMiddleware);
  *
  * @see https://trpc.io/docs/procedures
  */
-export const protectedProcedure = t.procedure
-  .use(timingMiddleware)
-  .use(({ ctx, next }) => {
-    if (!ctx.user?.id) {
-      throw new TRPCError({ code: "UNAUTHORIZED" });
-    }
-    return next({
-      ctx: {
-        // infers the `session` as non-nullable
-        user: ctx.user,
-      },
-    });
-  });
+export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
+  console.log(">>> protectedProcedure", ctx.user);
+  if (!ctx.user) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  }
+
+  return next({ ctx: { user: ctx.user } });
+});
